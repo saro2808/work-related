@@ -4,6 +4,8 @@
 #include <numeric>
 #include <fstream>
 
+#define BLOCK_SIZE 256
+
 std::set<int> prime; // this set will be the collection of prime numbers, where we can select random primes p and q
 int public_key;
 int private_key;
@@ -59,42 +61,47 @@ void setkeys() {
 	private_key = d;
 }
 // to encrypt the given number
-int64_t encrypt(double message) {
-	int e = public_key;
-	int64_t encrpyted_text = 1;
-	while (e--) {
-		encrpyted_text *= message;
-		encrpyted_text %= n;
+void encrypt(const std::string& message, int start_index, std::string& encoded) {
+	const int end_index = start_index + BLOCK_SIZE;
+	for (int i = start_index; i < end_index; ++i) {
+		char symbol = message[i];
+		int e = public_key;
+		int64_t encrypted_text = 1;
+		while (e--) {
+			encrypted_text *= symbol;
+			encrypted_text %= n;
+		}
+		encoded += encrypted_text + ' ';
 	}
-	return encrpyted_text;
 }
 // to decrypt the given number
-int64_t decrypt(int encrpyted_text) {
-	int d = private_key;
-	int64_t decrypted = 1;
-	while (d--) {
-		decrypted *= encrpyted_text;
-		decrypted %= n;
+void decrypt(const std::vector<int>& encoded, int start_index, std::string& decoded) {
+	const int end_index = start_index + BLOCK_SIZE;
+	for (int i = 0; i < BLOCK_SIZE; ++i) {
+		int d = private_key;
+		int64_t decrypted = 1;
+		while (d--) {
+			decrypted *= encoded[i];
+			decrypted %= n;
+		}
+		decoded += (char)decrypted;
 	}
-	return decrypted;
 }
 // first converting each character to its ASCII value and then encoding it
 // then decoding the number to get the ASCII and converting it to character
-std::vector<int> encoder(std::string message) {
-	std::vector<int> form;
-	// calling the encrypting function in encoding function
-	for (auto& letter : message) {
-		form.push_back(encrypt((int)letter));
+std::string encoder(const std::string& message) {
+	std::string encoded;
+	for (int i = 0; i < message.length(); i += BLOCK_SIZE) {
+		encrypt(message, i, encoded);
 	}
-	return form;
+	return encoded;
 }
-std::string decoder(std::vector<int> encoded) {
-	std::string s;
-	// calling the decrypting function decoding function
-	for (auto& num : encoded) {
-		s += decrypt(num);
+std::string decoder(const std::vector<int>& encoded) {
+	std::string decoded;
+	for (int i = 0; i < encoded.size(); i += BLOCK_SIZE) {
+		decrypt(encoded, i, decoded);
 	}
-	return s;
+	return decoded;
 }
 int main() {
 	primefiller();
@@ -113,12 +120,22 @@ int main() {
 	}
 	std::string line;
 	while (std::getline(in, line)) {
-		std::vector<int> coded = encoder(line);
-		for (auto& p: coded) {
-			encrypted << p;
-			decrypted << (char)decrypt(p);
-		}
+		std::string coded = encoder(line);
+		encrypted << coded;
 		encrypted << '\n';
+	}
+	std::vector<int> encoded;
+	while (std::getline(encrypted, line)) {
+		std::string delimiter = " ";
+		size_t pos = 0;
+		std::string token;
+		while ((pos = line.find(delimiter)) != std::string::npos) {
+			token = line.substr(0, pos);
+			encoded.push_back(stoi(token));
+			line.erase(0, pos + delimiter.length());
+		}
+		encoded.push_back(std::stoi(line));
+		decrypted << decoder(encoded);
 		decrypted << '\n';
 	}
 	return 0;
