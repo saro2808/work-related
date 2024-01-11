@@ -3,140 +3,185 @@
 #include <vector>
 #include <numeric>
 #include <fstream>
+#include <cstdlib>
+#include <time.h>
+#include <sstream>
 
 #define BLOCK_SIZE 256
 
-std::set<int> prime; // this set will be the collection of prime numbers, where we can select random primes p and q
-int public_key;
-int private_key;
-int n;
-// we will run the function only once to fill the set of prime numbers
-void primefiller() {
-	// method used to fill the primes set is seive of eratosthenes (a method to collect prime numbers)
-	std::vector<bool> seive(250, true);
-	seive[0] = false;
-	seive[1] = false;
-	for (int i = 2; i < 250; ++i) {
-		for (int j = i * 2; j < 250; j += i) {
-			seive[j] = false;
+namespace Numbers {
+
+const int prime_count = 9592; 
+
+int64_t pick_random_prime() {
+	std::ifstream primes("primes.txt");
+	if (!primes.is_open()) {
+		std::cerr << "Error opening file: primes.txt" << std::endl;
+		std::abort();
+	}
+	int prime_to_pick = rand() % prime_count;
+	std::string line;
+	int current_line = 0;
+	while (std::getline(primes, line)) {
+		++current_line;
+		if (current_line == prime_to_pick) {
+			return std::stoll(line);
 		}
 	}
-	for (int i = 0; i < seive.size(); ++i) {
-		if (seive[i]) {
-			prime.insert(i);
-		}
-	}
+	std::cerr << "Line number not found: " << prime_to_pick << std::endl;
+	std::abort();
 }
-// picking a random prime number and erasing that prime number from list because p!=q
-int pickrandomprime() {
-	int k = rand() % prime.size();
-	auto it = prime.begin();
-	while (k--) {
-		++it;
+
+int64_t gcd_extended(int64_t a, int64_t b, int64_t& x, int64_t& y) {
+	if (a == 0) {
+		x = 0;
+		y = 1;
+		return b;
 	}
-	int ret = *it;
-	prime.erase(it);
-	return ret;
+	int64_t x1, y1;
+	int64_t gcd = gcd_extended(b % a, a, x1, y1);
+
+	x = y1 - (b / a) * x1;
+	y = x1;
+	return gcd;
 }
-void setkeys() {
-	int prime1 = pickrandomprime(); // first prime number
-	int prime2 = pickrandomprime(); // second prime number
-	n = prime1 * prime2;
-	int fi = (prime1 - 1) * (prime2 - 1);
-	int e = 2;
-	while (1) {
-		if (std::gcd(e, fi) == 1) {
-			break;
+
+int64_t mod_inverse(int64_t e, int64_t t) {
+	int64_t x, y;
+	int64_t gcd = gcd_extended(e, t, x, y);
+	if (gcd != 1) {
+		return -1; // no inverse exists
+	}
+	return (x % t + t) % t;
+}
+
+int64_t mod_pow(int64_t base, int64_t exp, int64_t mod) {
+	int64_t result = 1;
+	base %= mod;
+	while (exp > 0) {
+		if (exp % 2 == 1) {
+			result = (result * base) % mod;
 		}
-		++e;
-	} // d = (k*Φ(n) + 1) / e for some integer k
+		exp = exp >> 1;
+		base = (base * base) % mod;
+	}
+	return result;
+}
+
+} // namespace Numbers
+
+class RSA {
+	int64_t _n;
+	int64_t public_key;
+	int64_t private_key;
+	
+	void set_keys();
+	
+	void encode_block(const std::string& message, int start_index, std::string& encoded);
+	void decode_block(const std::string& encoded, int start_index, std::string& decoded);
+public:
+	RSA() {
+		set_keys();
+	}
+	std::string encode(const std::string& message);
+	std::string decode(const std::string& encoded);
+};
+
+void RSA::set_keys() {
+	int e = (1 << 16) + 1;
 	public_key = e;
-	int d = 2;
-	while (1) {
-		if ((d * e) % fi == 1) {
-			break;
-		}
-		++d;
+	
+	int64_t prime1 = Numbers::pick_random_prime();
+	int64_t prime2 = Numbers::pick_random_prime();
+	while (prime2 == prime1) {
+		prime2 = Numbers::pick_random_prime();
+	}
+	_n = prime1 * prime2;
+	int64_t totient = std::lcm(prime1 - 1, prime2 - 1); // Charmichael's totient function
+	int64_t d = 2;
+	d = Numbers::mod_inverse(e, totient);
+	if (d == -1) {
+		std::abort();
 	}
 	private_key = d;
 }
-// to encrypt the given number
-void encrypt(const std::string& message, int start_index, std::string& encoded) {
-	const int end_index = start_index + BLOCK_SIZE;
+
+void RSA::encode_block(const std::string& message, int start_index, std::string& encoded) {
+	int end_index = start_index + BLOCK_SIZE;
+	if (end_index > message.length()) {
+		end_index = message.length();
+	}
 	for (int i = start_index; i < end_index; ++i) {
 		char symbol = message[i];
-		int e = public_key;
+		int64_t e = public_key;
 		int64_t encrypted_text = 1;
-		while (e--) {
-			encrypted_text *= symbol;
-			encrypted_text %= n;
-		}
-		encoded += encrypted_text + ' ';
+		encrypted_text = Numbers::mod_pow(symbol, public_key, _n);
+		encoded += std::to_string(encrypted_text) + ' ';
 	}
 }
-// to decrypt the given number
-void decrypt(const std::vector<int>& encoded, int start_index, std::string& decoded) {
-	const int end_index = start_index + BLOCK_SIZE;
-	for (int i = 0; i < BLOCK_SIZE; ++i) {
-		int d = private_key;
-		int64_t decrypted = 1;
-		while (d--) {
-			decrypted *= encoded[i];
-			decrypted %= n;
+
+void RSA::decode_block(const std::string& encoded, int start_index, std::string& decoded) {
+	int end_index = start_index + BLOCK_SIZE;
+	if (end_index > encoded.length()) {
+		end_index = encoded.length();
+	}
+	for (int i = start_index; i < end_index; ++i) {
+		int64_t coded = 0;
+		while (encoded[i] >= '0' && encoded[i] <= '9') {
+			coded *= 10;
+			coded += encoded[i++] - '0';
 		}
+		if (coded == 0) {
+			continue;
+		}
+		int64_t d = private_key;
+		int64_t decrypted = 1;
+		decrypted = Numbers::mod_pow(coded, private_key, _n);
 		decoded += (char)decrypted;
 	}
 }
-// first converting each character to its ASCII value and then encoding it
-// then decoding the number to get the ASCII and converting it to character
-std::string encoder(const std::string& message) {
+
+std::string RSA::encode(const std::string& message) {
 	std::string encoded;
 	for (int i = 0; i < message.length(); i += BLOCK_SIZE) {
-		encrypt(message, i, encoded);
+		encode_block(message, i, encoded);
 	}
 	return encoded;
 }
-std::string decoder(const std::vector<int>& encoded) {
+
+std::string RSA::decode(const std::string& encoded) {
 	std::string decoded;
 	for (int i = 0; i < encoded.size(); i += BLOCK_SIZE) {
-		decrypt(encoded, i, decoded);
+		decode_block(encoded, i, decoded);
 	}
 	return decoded;
 }
+
 int main() {
-	primefiller();
-	setkeys();
+	RSA rsa;
 	std::ifstream in("document.docx");
 	std::fstream encrypted("encrypted.docx", std::fstream::in | std::fstream::out);
 	std::fstream decrypted("decrypted.docx", std::fstream::in | std::fstream::out);
 	if (!in.is_open()) {
-		std::cout << "Error opening document.docx\n";
+		std::cerr << "Error opening document.docx\n";
+		std::abort();
 	}
 	if (!encrypted.is_open()) {
-		std::cout << "Error opening encrypted.docx\n";
-	}
-	if (!decrypted.is_open()) {
-		std::cout << "Error opening decrypted.docx\n";
+		std::cerr << "Error opening encrypted.docx\n";
+		std::abort();
 	}
 	std::string line;
 	while (std::getline(in, line)) {
-		std::string coded = encoder(line);
-		encrypted << coded;
-		encrypted << '\n';
+		encrypted << rsa.encode(line) << '\n';
 	}
-	std::vector<int> encoded;
+
+	if (!decrypted.is_open()) {
+		std::cerr << "Error opening decrypted.docx\n";
+		std::abort();
+	}
+	encrypted.seekg(0, std::ios::beg);
 	while (std::getline(encrypted, line)) {
-		std::string delimiter = " ";
-		size_t pos = 0;
-		std::string token;
-		while ((pos = line.find(delimiter)) != std::string::npos) {
-			token = line.substr(0, pos);
-			encoded.push_back(stoi(token));
-			line.erase(0, pos + delimiter.length());
-		}
-		encoded.push_back(std::stoi(line));
-		decrypted << decoder(encoded);
-		decrypted << '\n';
+		decrypted << rsa.decode(line) << '\n';
 	}
 	return 0;
 }
