@@ -17,7 +17,7 @@ int64_t pick_random_prime() {
 	std::ifstream primes("primes.txt");
 	if (!primes.is_open()) {
 		std::cerr << "Error opening file: primes.txt" << std::endl;
-		std::abort();
+		return -1;
 	}
 	int prime_to_pick = rand() % prime_count;
 	std::string line;
@@ -28,8 +28,7 @@ int64_t pick_random_prime() {
 			return std::stoll(line);
 		}
 	}
-	std::cerr << "Line number not found: " << prime_to_pick << std::endl;
-	std::abort();
+	return -1; // should not reach here
 }
 
 int64_t gcd_extended(int64_t a, int64_t b, int64_t& x, int64_t& y) {
@@ -95,6 +94,9 @@ void RSA::set_keys() {
 	int64_t prime2 = Numbers::pick_random_prime();
 	while (prime2 == prime1) {
 		prime2 = Numbers::pick_random_prime();
+	}
+	if (prime1 == -1 || prime2 == -1) {
+		throw "Error generating primes";
 	}
 	_n = prime1 * prime2;
 	int64_t totient = std::lcm(prime1 - 1, prime2 - 1); // Charmichael's totient function
