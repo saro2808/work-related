@@ -4,8 +4,7 @@
 #include "numbers.hpp"
 
 void RSA::set_keys() {
-	int e = (1 << 16) + 1;
-	_public_key = e;
+	_public_key = (1 << 16) + 1;
 	
 	int64_t prime1 = Numbers::pick_random_prime();
 	int64_t prime2 = Numbers::pick_random_prime();
@@ -17,22 +16,17 @@ void RSA::set_keys() {
 	}
 	_n = prime1 * prime2;
 	int64_t totient = std::lcm(prime1 - 1, prime2 - 1); // Charmichael's totient function
-	int64_t d = 2;
-	d = Numbers::mod_inverse(e, totient);
-	if (d == -1) {
+	
+	_private_key = Numbers::mod_inverse(_public_key, totient);
+	if (_private_key == -1) {
 		throw "Error generating mod inverse: mod inverse does not exist";
 	}
-	_private_key = d;
 }
 
 void RSA::encode_block(const std::string& message, int start_index, std::string& encoded) {
-	int end_index = start_index + BLOCK_SIZE;
-	if (end_index > message.length()) {
-		end_index = message.length();
-	}
+	int end_index = std::min<int64_t>(start_index + BLOCK_SIZE, message.length());
 	for (int i = start_index; i < end_index; ++i) {
 		char symbol = message[i];
-		int64_t e = _public_key;
 		int64_t encrypted_text = 1;
 		encrypted_text = Numbers::mod_pow(symbol, _public_key, _n);
 		encoded += std::to_string(encrypted_text) + ' ';
@@ -40,10 +34,7 @@ void RSA::encode_block(const std::string& message, int start_index, std::string&
 }
 
 void RSA::decode_block(const std::string& encoded, int start_index, std::string& decoded) {
-	int end_index = start_index + BLOCK_SIZE;
-	if (end_index > encoded.length()) {
-		end_index = encoded.length();
-	}
+	int end_index = std::min<int64_t>(start_index + BLOCK_SIZE, encoded.length());
 	for (int i = start_index; i < end_index; ++i) {
 		int64_t coded = 0;
 		while (encoded[i] >= '0' && encoded[i] <= '9') {
@@ -53,7 +44,6 @@ void RSA::decode_block(const std::string& encoded, int start_index, std::string&
 		if (coded == 0) {
 			continue;
 		}
-		int64_t d = _private_key;
 		int64_t decrypted = 1;
 		decrypted = Numbers::mod_pow(coded, _private_key, _n);
 		decoded += (char)decrypted;

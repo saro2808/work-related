@@ -55,10 +55,12 @@ int64_t mod_pow(int64_t base, int64_t exp, int64_t mod) {
 	base %= mod;
 	while (exp > 0) {
 		if (exp % 2 == 1) {
-			result = (result * base) % mod;
+			result *= base;
+			result %= mod;
 		}
 		exp >>= 1;
-		base = (base * base) % mod;
+		base *= base;
+		base %= mod;
 	}
 	return result;
 }
