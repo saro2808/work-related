@@ -1,13 +1,12 @@
 #include <iostream>
-#include <set>
-#include <vector>
 #include <numeric>
 #include <fstream>
 #include <cstdlib>
-#include <time.h>
 #include <sstream>
 
-#define BLOCK_SIZE 256
+#include "include/rsa.hpp"
+
+/*#define BLOCK_SIZE 256
 
 namespace Numbers {
 
@@ -157,7 +156,7 @@ std::string RSA::decode(const std::string& encoded) {
 		decode_block(encoded, i, decoded);
 	}
 	return decoded;
-}
+}*/
 
 int main() {
 	RSA rsa;
